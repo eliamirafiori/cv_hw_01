@@ -2,6 +2,7 @@ import os
 
 import cv2 as cv
 import numpy as np
+from matplotlib import pyplot as plt
 
 from src.calibration.calibration import calibration, load_calibration
 from src.epipolar_geometry.epipolar_lines import draw_epipolar_lines
@@ -18,6 +19,7 @@ from src.epipolar_geometry.fundamental_matrix import (
 from src.feature_detection_matching.feature_detectors import feature_detection
 from src.feature_detection_matching.feature_matchers import (
     brute_force_based_matcher,
+    feature_matcher,
     flann_based_matcher,
 )
 from src.triangulation.projection_matrices import (
@@ -29,6 +31,51 @@ from src.triangulation.triangulation_cloud_points import (
     triangulate_3d_points,
 )
 from src.utils.utils import get_keypoint_coords_from_matches
+
+
+def visualize_matcher(img1, kp1, img2, kp2, matches):
+
+    # Visualization
+    matches_to_show = min(100, len(matches))
+
+    if matcher_type == "FlannBasedMatcher":
+        # drawMatches creates a new image containing both img1 and img2 side-by-side
+        # and draws lines connecting the matched keypoints.
+        img_matches = cv.drawMatches(
+            img1,
+            kp1,
+            img2,
+            kp2,
+            matches[:matches_to_show],
+            None,
+            flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
+        )
+
+        # Plotting
+        plt.figure(figsize=(15, 7))
+        plt.title("Feature matches (subset)")
+        plt.imshow(img_matches)
+        plt.axis("off")
+        plt.show()
+    else:
+        # drawMatches creates a new image containing both img1 and img2 side-by-side
+        # and draws lines connecting the matched keypoints.
+        img_matches = cv.drawMatches(
+            img1,
+            kp1,
+            img2,
+            kp2,
+            matches[:matches_to_show],
+            None,
+            flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
+        )
+
+        # Plotting
+        plt.figure(figsize=(15, 7))
+        plt.title("ORB feature matches (subset)")
+        plt.imshow(img_matches)
+        plt.axis("off")
+        plt.show()
 
 
 def compute_reprojection_error(P1, P2, points_3d, pts1, pts2):
@@ -67,12 +114,12 @@ if __name__ == "__main__":
     # Check if we need to run calibration, or just load it
     camera_path = "phone/vertical"
     calib_path = f"assets/calibration/{camera_path}/calibration.npz"
-    debug = False
+    debug = True
     detectors_matchers = [
         # ORB with lots of features, BFMatcher using Hamming (binary)
         (
             cv.ORB_create(nfeatures=10000),
-            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True),
+            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=False),
         ),
         # ORB with FLANN LSH
         (
@@ -86,6 +133,8 @@ if __name__ == "__main__":
             cv.AKAZE_create(threshold=0.0005),
             cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True),
         ),
+        # BRISK with BFMatcher using Hamming (binary)
+        (cv.BRISK_create(), cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)),
         # SIFT with BFMatcher using L2 (float descriptors)
         (cv.SIFT_create(), cv.BFMatcher(cv.NORM_L2, crossCheck=True)),
         # SIFT with FLANN KD-Tree
@@ -95,13 +144,11 @@ if __name__ == "__main__":
                 dict(algorithm=1, trees=5), dict(checks=50)
             ),  # KD-Tree for float descriptors
         ),
-        # BRISK with BFMatcher using Hamming (binary)
-        (cv.BRISK_create(), cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)),
     ]
 
     K, dist = None, None
 
-    if os.path.exists(calib_path) and False:
+    if os.path.exists(calib_path):
         print("Loading existing calibration...")
         K, dist = load_calibration(calib_path)
     else:
@@ -113,10 +160,16 @@ if __name__ == "__main__":
         )
 
     if debug:
-        print(f"Camera Matrix K: {K}")
-        print(f"Distortion Coefficients: {dist}")
+        print(f"Camera Matrix K:\n{K}\n")
+        print(f"Distortion Coefficients:\n{dist}\n")
 
     for detector, matcher in detectors_matchers:
+        if debug:
+            detector_type = type(detector).__name__
+            matcher_type = type(matcher).__name__
+            print(f"\n\nDetector: {detector_type}")
+            print(f"Matcher: {matcher_type}")
+
         ### Feature Extraction and Matching ###
 
         if debug:
@@ -128,6 +181,7 @@ if __name__ == "__main__":
             img2_path=f"assets/{camera_path}/2.jpg",
             K=K,
             dist=dist,
+            detector=detector,
             debug=debug,
         )
 
@@ -136,14 +190,20 @@ if __name__ == "__main__":
 
         # Matching Routing
         # Depending on the flag, we route the features to different matching strategies.
-        if use_FLANN_matcher:
-            # FLANN (Fast Library for Approximate Nearest Neighbors) is faster for large datasets.
-            # Note: Since ORB uses binary descriptors, FLANN requires specific tuning (LSH index).
-            matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
-        else:
-            # Brute-Force checks every keypoint in img1 against every keypoint in img2.
-            # It is slower but provides the mathematically 'perfect' nearest neighbor.
-            matches = brute_force_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
+        # if use_FLANN_matcher:
+        #     # FLANN (Fast Library for Approximate Nearest Neighbors) is faster for large datasets.
+        #     # Note: Since ORB uses binary descriptors, FLANN requires specific tuning (LSH index).
+        #     matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
+        # else:
+        #     # Brute-Force checks every keypoint in img1 against every keypoint in img2.
+        #     # It is slower but provides the mathematically 'perfect' nearest neighbor.
+        #     matches = brute_force_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
+        matches = feature_matcher(
+            img1, kp1, des1, img2, kp2, des2, matcher=matcher, debug=debug
+        )
+
+        if debug:
+            visualize_matcher(img1, kp1, img2, kp2, matches)
 
         ### Epipolar Geometry Estimation ###
 
@@ -209,7 +269,10 @@ if __name__ == "__main__":
             print(f"Projection Matrix 2:\n{P2}\n")
 
         points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
-        # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+        print("All points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
+
+        points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+        print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
 
         if debug:
             print(f"Generated {len(points_3d)} 3D points.")
@@ -219,11 +282,7 @@ if __name__ == "__main__":
             P1, P2, points_3d, pts1_valid, pts1_valid
         )
 
-        if True:
-            detector_type = type(detector).__name__
-            matcher_type = type(matcher).__name__
-            print(f"Detector: {detector_type}")
-            print(f"Matcher: {matcher_type}")
+        if debug:
             print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
             print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
             print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")

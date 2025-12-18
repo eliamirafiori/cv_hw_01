@@ -246,28 +246,32 @@ def feature_matcher(
     # )
     if matcher_type == "FlannBasedMatcher":
         # FLANN: use knnMatch + ratio test
-        knn_matches = matcher.knnMatch(des1, des2, k=2)
-        for m, n in knn_matches:
-            if m.distance < ratio_test * n.distance:
+        matches = matcher.knnMatch(des1, des2, k=2)
+
+        # Need to draw only good matches, so create a mask
+        matchesMask = [[0, 0] for i in range(len(matches))]
+
+        # Ratio test as per Lowe's paper
+        for i, (m, n) in enumerate(matches):
+            if m.distance < 0.7 * n.distance:
                 good_matches.append(m)
     else:
         # BFMatcher
-        if getattr(matcher, "crossCheck", False):
+        if getattr(matcher, "crossCheck", True):
             # Cross-checked BF: use match()
             matches = matcher.match(des1, des2)
+            # Lower distance = more similar descriptors = better match.
             good_matches = sorted(matches, key=lambda x: x.distance)
         else:
             # Non-cross-checked BF: use knnMatch + ratio test
-            knn_matches = matcher.knnMatch(des1, des2, k=2)
-            for m, n in knn_matches:
+            matches = matcher.knnMatch(des1, des2, k=2)
+
+            # Ratio test as per Lowe's paper
+            for m, n in matches:
                 if m.distance < ratio_test * n.distance:
                     good_matches.append(m)
+            # Lower distance = more similar descriptors = better match.
             good_matches = sorted(good_matches, key=lambda x: x.distance)
-
-    # Sorting
-    # DMatch objects have a 'distance' attribute.
-    # Lower distance = more similar descriptors = better match.
-    matches = sorted(matches, key=lambda x: x.distance)
 
     # Selection
     # We slice the list to keep only the top N matches.
@@ -278,28 +282,6 @@ def feature_matcher(
         print(
             f"Using {len(good_matches)} best matches for fundamental matrix estimation."
         )
-
-    # Visualization
-    matches_to_show = min(100, len(good_matches))
-
-    # drawMatches creates a new image containing both img1 and img2 side-by-side
-    # and draws lines connecting the matched keypoints.
-    img_matches = cv.drawMatches(
-        img1,
-        kp1,
-        img2,
-        kp2,
-        good_matches[:matches_to_show],
-        None,
-        flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
-    )
-
-    # Plotting
-    plt.figure(figsize=(15, 7))
-    plt.title("Feature matches (subset)")
-    plt.imshow(img_matches)
-    plt.axis("off")
-    plt.show()
 
     return good_matches
 
