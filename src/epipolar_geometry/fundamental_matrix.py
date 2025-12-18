@@ -166,6 +166,43 @@ REFERENCES
 """
 
 
+def estimate_fundamental_matrix(
+    pts1,
+    pts2,
+    ransac_thresh=1.0,
+    confidence=0.999,
+):
+    """
+    Estimates the Fundamental Matrix F using RANSAC and visualizes inliers.
+    """
+    # Fundamental Matrix Estimation
+    # This calculates the relationship between pixel coordinates in two views.
+    # cv.FM_RANSAC: Uses Random Sample Consensus to ignore outliers (bad matches).
+    # ransacReprojThreshold: The maximum distance (in pixels) a point can be from the epipolar line to be considered an inlier.
+    F, mask = cv.findFundamentalMat(
+        pts1,
+        pts2,
+        cv.FM_RANSAC,
+        ransacReprojThreshold=ransac_thresh,
+        confidence=confidence,
+    )
+
+    if F is None:
+        raise RuntimeError("Fundamental matrix estimation failed")
+
+    # Filtering Inliers
+    # "mask" is a list of 0s (outliers) and 1s (inliers).
+    # We flatten it to a 1D array of booleans.
+    mask = mask.ravel().astype(bool)
+
+    # Select ONLY the points that agree with the Fundamental Matrix geometry.
+    pts1_in = pts1[mask]
+    pts2_in = pts2[mask]
+
+
+    return F, pts1_in, pts2_in, mask
+
+
 def find_fundamental_matrix(
     img1,
     kp1,

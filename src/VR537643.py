@@ -1,20 +1,29 @@
 import os
 
 import numpy as np
+import cv2 as cv
 
 from src.calibration.calibration import calibration, load_calibration
 from src.epipolar_geometry.epipolar_lines import draw_epipolar_lines
 from src.epipolar_geometry.essential_matrix import (
     compute_essential_matrix,
+    enforce_essential_constraints,
+    estimate_essential_matrix,
     find_essential_matrix,
 )
-from src.epipolar_geometry.fundamental_matrix import find_fundamental_matrix
+from src.epipolar_geometry.fundamental_matrix import (
+    estimate_fundamental_matrix,
+    find_fundamental_matrix,
+)
 from src.feature_detection_matching.feature_detection import (
     brute_force_based_matcher,
     feature_detection,
     flann_based_matcher,
 )
-from src.triangulation.projection_matrices import find_camera_matrices
+from src.triangulation.projection_matrices import (
+    estimate_projection_matrices,
+    find_camera_matrices,
+)
 from src.triangulation.triangulation_cloud_points import (
     plot_3d_point_cloud,
     triangulate_3d_points,
@@ -51,11 +60,7 @@ def compute_reprojection_error(P1, P2, points_3d, pts1, pts2):
     mean_error_2 = np.mean(error_2)
     total_mean_error = (mean_error_1 + mean_error_2) / 2.0
 
-    print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
-    print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
-    print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
-
-    return total_mean_error
+    return mean_error_1, mean_error_2, total_mean_error
 
 
 if __name__ == "__main__":
@@ -114,7 +119,7 @@ if __name__ == "__main__":
     if debug:
         print("\n\n### Epipolar Geometry Estimation ###\n")
 
-    # Extract Raw Points (The starting pool of points)
+    # Extract matched points
     pts1, pts2 = get_keypoint_coords_from_matches(kp1, kp2, matches)
 
     if debug:
@@ -124,7 +129,43 @@ if __name__ == "__main__":
         img1, kp1, pts1, img2, kp2, pts2, matches, debug=debug
     )
 
+    F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
+        pts1, pts2, ransac_thresh=1.0, confidence=0.999
+    )
+
+    if debug:
+        print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
+
     E, inliers1, inliers2 = find_essential_matrix(pts1, pts2, K, debug=debug)
+
+    # Essential matrix from Fundamental matrix
+    # At this point E is NOT guaranteed to be a valid Essential matrix.
+    E = K.T @ F @ K
+
+    E = enforce_essential_constraints(E)
+
+    # Essential matrix directly
+    E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K, debug=True)
+
+    if debug:
+        print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
+
+    # Recover pose
+    # This extracts the rotation and translation.
+    # It uses the points (pts1, pts2) to check which of the 4 solutions is valid.
+    # pts1 and pts2 should be the INLIERS from your previous steps.
+    num_points, R, t, mask = cv.recoverPose(E, pts1_in, pts2_in, K)
+
+    # Filter points again using the pose mask
+    mask_pose = mask.ravel().astype(bool)
+    pts1_valid = pts1[mask_pose]
+    pts2_valid = pts2[mask_pose]
+
+    if debug:
+        print(f"Recovered Pose with {num_points} valid points.")
+        print("\nRotation matrix R:\n", R)
+        print("\nTranslation vector t:\n", t)
+        print(f"RecoverPose kept {num_points} points (Cheirality check)")
 
     draw_epipolar_lines(img1, pts1, img2, pts2, F)
 
@@ -137,9 +178,25 @@ if __name__ == "__main__":
         E, K, inliers1, inliers2, debug=debug
     )
 
-    points_3d = triangulate_3d_points(P1, P2, valid_pts1, valid_pts2, debug=debug)
+    P1, P2 = estimate_projection_matrices(K, R, t)
+
+    if debug:
+        print('\nProjection Matrix 1 "Camera 1":\n', P1)
+        print('\nProjection Matrix 2 "Camera 2":\n', P2)
+
+    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+
+    if debug:
+        print(f"Generated {len(points_3d)} 3D points.")
 
     # Calculate quantitative error
-    compute_reprojection_error(P1, P2, points_3d, valid_pts1, valid_pts2)
+    mean_error_1, mean_error_2, total_mean_error = compute_reprojection_error(
+        P1, P2, points_3d, pts1_in, pts2_in
+    )
+
+    if debug:
+        print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
+        print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
+        print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
 
     plot_3d_point_cloud(points_3d)

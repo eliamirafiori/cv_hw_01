@@ -143,6 +143,25 @@ REFERENCES
 """
 
 
+def estimate_projection_matrices(K, R, t):
+    """
+    Computes P1 and P2 from the Essential Matrix using recoverPose.
+    """
+    # Construct P1 (Origin)
+    # P1 = K @ [I | 0]
+    # Identity matrix (3x3) concatenated with a zero column (3x1)
+    I = np.eye(3)
+    zeros = np.zeros((3, 1))
+    P1 = np.dot(K, np.hstack((I, zeros)))
+
+    # Construct P2 (New View)
+    # P2 = K @ [R | t]
+    P2 = np.dot(K, np.hstack((R, t)))
+
+    # Return P1, P2 AND the points that actually define this pose
+    return P1, P2
+
+
 def find_camera_matrices(E, K, pts1, pts2, debug: bool = False):
     """
     Computes P1 and P2 from the Essential Matrix using recoverPose.
@@ -166,19 +185,19 @@ def find_camera_matrices(E, K, pts1, pts2, debug: bool = False):
         print(f"RecoverPose kept {points} points (Cheirality check)")
 
     # Construct P1 (Origin)
-    # P1 = K * [I | 0]
+    # P1 = K @ [I | 0]
     # Identity matrix (3x3) concatenated with a zero column (3x1)
     I = np.eye(3)
     zeros = np.zeros((3, 1))
     P1 = np.dot(K, np.hstack((I, zeros)))
 
     # Construct P2 (New View)
-    # P2 = K * [R | t]
+    # P2 = K @ [R | t]
     P2 = np.dot(K, np.hstack((R, t)))
 
     if debug:
-        print("\nProjection Matrix 1 \"Camera 1\":\n", P1)
-        print("\nProjection Matrix 2 \"Camera 2\":\n", P2)
+        print('\nProjection Matrix 1 "Camera 1":\n', P1)
+        print('\nProjection Matrix 2 "Camera 2":\n', P2)
 
     # Return P1, P2 AND the points that actually define this pose
     return P1, P2, pts1_valid, pts2_valid

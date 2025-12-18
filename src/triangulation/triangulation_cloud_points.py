@@ -147,7 +147,7 @@ REFERENCES
 """
 
 
-def triangulate_3d_points(P1, P2, pts1, pts2, debug: bool = False):
+def triangulate_3d_points(P1, P2, pts1, pts2):
     """
     Triangulates 2D points from two views into 3D space.
     """
@@ -169,14 +169,12 @@ def triangulate_3d_points(P1, P2, pts1, pts2, debug: bool = False):
     # Transpose back to (N, 4) and take the first 3 columns (x, y, z)
     points_3d = points_3d[:3].T
 
-    if debug:
-        print(f"Generated {len(points_3d)} 3D points.")
 
     # For nicer visualization, center the point cloud
     mean_3d = np.mean(points_3d, axis=0)
     points3d_centered = points_3d - mean_3d
 
-    return points_3d
+    return points3d_centered
 
 
 def plot_3d_point_cloud(points_3d):

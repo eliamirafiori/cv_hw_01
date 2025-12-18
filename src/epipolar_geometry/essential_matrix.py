@@ -140,6 +140,60 @@ REFERENCES
 """
 
 
+def estimate_essential_matrix(
+    pts1,
+    pts2,
+    K,
+    prob=0.999,
+    threshold=1.0,
+    debug=False,
+):
+    """
+    Estimates the Essential Matrix E using RANSAC and the Camera Matrix K.
+    """
+
+    # Essential Matrix Estimation
+    # method=cv.RANSAC: Standard RANSAC
+    # prob=0.999: Confidence level (higher is better for E)
+    # threshold=1.0: Max distance from epipolar line (in pixels)
+    E, mask = cv.findEssentialMat(
+        pts1,
+        pts2,
+        K,
+        method=cv.RANSAC,
+        prob=prob,
+        threshold=threshold,
+    )
+
+    if E is None:
+        raise RuntimeError("Essential matrix estimation failed")
+
+    # Flatten the mask
+    # "mask" is a list of 0s (outliers) and 1s (inliers).
+    # We flatten it to a 1D array of booleans.
+    mask = mask.ravel().astype(bool)
+
+    # Select ONLY the points that agree with the Fundamental Matrix geometry.
+    pts1_in = pts1[mask]
+    pts2_in = pts2[mask]
+
+    return E, pts1_in, pts2_in, mask
+
+
+def enforce_essential_constraints(E):
+    """
+    Enforce Essential Matrix constraints (mandatory)
+
+    A valid Essential Matrix must have:
+        - rank = 2
+        - singular values = (σ, σ, 0)
+    """
+    U, S, Vt = np.linalg.svd(E)
+    sigma = (S[0] + S[1]) / 2.0
+    E_corrected = U @ np.diag([sigma, sigma, 0]) @ Vt
+    return E_corrected
+
+
 def find_essential_matrix(
     pts1, pts2, K, prob: float = 0.999, threshold: float = 1.0, debug: bool = False
 ):
