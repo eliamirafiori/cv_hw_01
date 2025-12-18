@@ -125,30 +125,27 @@ if __name__ == "__main__":
     if debug:
         print(f"Initial Matches: {len(pts1)}")
 
-    # F, inliers1, inliers2 = find_fundamental_matrix(
-    #     img1, kp1, pts1, img2, kp2, pts2, matches, debug=debug
-    # )
-
     F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
         pts1, pts2, ransac_thresh=1.0, confidence=0.999
     )
 
     if debug:
         print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
-
-    # E, inliers1, inliers2 = find_essential_matrix(pts1, pts2, K, debug=debug)
+        print(f"Fundamental Matrix:\n{F}\n")
 
     # Essential matrix from Fundamental matrix
     # At this point E is NOT guaranteed to be a valid Essential matrix.
     E = K.T @ F @ K
 
     E = enforce_essential_constraints(E)
+    print(f"Derived Essential Matrix:\n{E}\n")
 
     # Essential matrix directly
     E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
 
     if debug:
         print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
+        print(f"Essential Matrix:\n{E}\n")
 
     # Recover pose
     # This extracts the rotation and translation.
@@ -163,8 +160,8 @@ if __name__ == "__main__":
 
     if debug:
         print(f"Recovered Pose with {num_points} valid points.")
-        print("\nRotation matrix R:\n", R)
-        print("\nTranslation vector t:\n", t)
+        print(f"Rotation matrix R:\n{R}\n")
+        print(f"Translation vector t:\n{t}\n")
         print(f"RecoverPose kept {num_points} points (Cheirality check)")
 
     draw_epipolar_lines(img1, pts1, img2, pts2, F)
@@ -174,18 +171,14 @@ if __name__ == "__main__":
     if debug:
         print("\n\n### Triangulation and 3D Reconstruction ###\n")
 
-    # P1, P2, valid_pts1, valid_pts2 = find_camera_matrices(
-    #     E, K, inliers1, inliers2, debug=debug
-    # )
-
     P1, P2 = estimate_projection_matrices(K, R, t)
 
     if debug:
-        print('\nProjection Matrix 1 "Camera 1":\n', P1)
-        print('\nProjection Matrix 2 "Camera 2":\n', P2)
+        print(f'Projection Matrix 1 "Camera 1":\n{P1}\n')
+        print(f'Projection Matrix 2 "Camera 2":\n{P2}\n')
 
     points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
-    points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+    # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
 
     if debug:
         print(f"Generated {len(points_3d)} 3D points.")
