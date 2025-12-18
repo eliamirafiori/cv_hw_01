@@ -294,6 +294,13 @@ def brute_force_based_matcher(
 
     # Perform Matching
     # bf.match() returns a list of DMatch objects.
+    # A DMatch object has four main attributes:
+    # Match(
+    #    queryIdx,  # index of the descriptor in the first set (des1)
+    #    trainIdx,  # index of the descriptor in the second set (des2)
+    #    imgIdx,    # index of the training image (used with multiple images)
+    #    distance   # distance between the two descriptors
+    # )
     # Unlike knnMatch, this returns the single best match for each keypoint (because of crossCheck).
     matches = bf.match(des1, des2)
 
@@ -303,7 +310,7 @@ def brute_force_based_matcher(
     matches = sorted(matches, key=lambda x: x.distance)
 
     # Selection
-    # I slice the list to keep only the top N matches.
+    # We slice the list to keep only the top N matches.
     # This removes weak matches that might just be noise or repetitive textures.
     good_matches = matches[: min(max_matches, len(matches))]
 

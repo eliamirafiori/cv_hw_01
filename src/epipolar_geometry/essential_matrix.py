@@ -171,7 +171,7 @@ def find_essential_matrix(
     pts2_inliers = pts2[mask]
 
     if debug:
-        print(f"Estimated Essential Matrix E:\n{E}")
+        print(f"\nEstimated Essential Matrix E:\n{E}")
         print(f"Essential Matrix kept {len(pts1_inliers)} / {len(pts1)} points")
 
     # We return the mask because findEssentialMat might filter even more points

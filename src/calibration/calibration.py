@@ -311,20 +311,30 @@ def calibration(
         objpoints, imgpoints, image_shape, None, None
     )
 
-    if debug:
-        # Compute the mean re-projection error (in pixels) over the calibration images
-        mean_error = 0
-        for i in range(len(objpoints)):
-            imgpoints2, _ = cv.projectPoints(
-                objpoints[i], rot_vecs[i], trans_vecs[i], K, dist_coeffs
-            )
-            error = cv.norm(imgpoints[i], imgpoints2, cv.NORM_L2) / len(imgpoints2)
-            mean_error += error
+    # Compute the mean re-projection error (in pixels) over the calibration images
+    errors = []
 
-        print(f"Camera Matrix K:\n{K}")
-        print(f"Re-projection Error:\n\t{rms_error}")
+    for objp, imgp, rvec, tvec in zip(objpoints, imgpoints, rot_vecs, trans_vecs):
+        projected, _ = cv.projectPoints(objp, rvec, tvec, K, dist_coeffs)
+        projected = projected.reshape(-1, 2)
+        imgp = imgp.reshape(-1, 2)
+
+        # Euclidean pixel error per point
+        err = np.linalg.norm(imgp - projected, axis=1)
+        errors.append(err)
+
+    errors = np.concatenate(errors)
+
+    mean_error = np.mean(errors)
+    std_error = np.std(errors)
+
+    if debug:
+
+        print(f"\nCamera Matrix K:\n{K}")
+        print(f"Re-projection Error (in pixels):\n\t{rms_error}")
         # The error is good when it's under 0.08
-        print(f"Mean Re-projection Error (in pixels):\n\t{mean_error / len(objpoints)}")
+        print(f"Mean reprojection error: {mean_error:.3f} px")
+        print(f"Std dev reprojection error: {std_error:.3f} px")
 
         # Iterate over all images to show their individual poses
         for i, (r_vec, t_vec) in enumerate(zip(rot_vecs, trans_vecs)):
@@ -346,5 +356,15 @@ def calibration(
         rot_vecs=rot_vecs,
         trans_vecs=trans_vecs,
     )
+
+    img = cv.imread(os.path.join(calibration_assets_path, "calibration_image.png"))
+
+    # Draw detected corners
+    cv.drawChessboardCorners(img, inner_corners, imgpoints[i], True)
+
+    # Draw reprojected points
+    proj, _ = cv.projectPoints(objpoints[i], rot_vecs[i], trans_vecs[i], K, dist_coeffs)
+    for p in proj:
+        cv.circle(img, tuple(p.ravel().astype(int)), 3, (0, 0, 255), -1)
 
     return K, dist_coeffs

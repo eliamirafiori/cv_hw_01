@@ -1,6 +1,6 @@
-import numpy as np
 import os
 
+import numpy as np
 
 from src.calibration.calibration import calibration, load_calibration
 from src.epipolar_geometry.epipolar_lines import draw_epipolar_lines
@@ -10,8 +10,8 @@ from src.epipolar_geometry.essential_matrix import (
 )
 from src.epipolar_geometry.fundamental_matrix import find_fundamental_matrix
 from src.feature_detection_matching.feature_detection import (
-    feature_detection,
     brute_force_based_matcher,
+    feature_detection,
     flann_based_matcher,
 )
 from src.triangulation.projection_matrices import find_camera_matrices
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     K, dist = None, None
 
-    if os.path.exists(calib_path):
+    if os.path.exists(calib_path) and False:
         print("Loading existing calibration...")
         K, dist = load_calibration(calib_path)
     else:
@@ -82,6 +82,9 @@ if __name__ == "__main__":
         print(f"Distortion Coefficients: {dist}")
 
     ### Feature Extraction and Matching ###
+
+    if debug:
+        print("\n\n### Feature Extraction and Matching ###\n")
 
     # Run feature detection WITH undistortion
     img1, kp1, des1, img2, kp2, des2 = feature_detection(
@@ -108,6 +111,9 @@ if __name__ == "__main__":
 
     ### Epipolar Geometry Estimation ###
 
+    if debug:
+        print("\n\n### Epipolar Geometry Estimation ###\n")
+
     # Extract Raw Points (The starting pool of points)
     pts1, pts2 = get_keypoint_coords_from_matches(kp1, kp2, matches)
 
@@ -120,13 +126,12 @@ if __name__ == "__main__":
 
     E, inliers1, inliers2 = find_essential_matrix(pts1, pts2, K, debug=debug)
 
-    E2, _, _ = compute_essential_matrix(pts1, pts2, K)
-
-    print(f"E2:\n{E2}")
-
     draw_epipolar_lines(img1, pts1, img2, pts2, F)
 
     ### Triangulation and 3D Reconstruction ###
+
+    if debug:
+        print("\n\n### Triangulation and 3D Reconstruction ###\n")
 
     P1, P2, valid_pts1, valid_pts2 = find_camera_matrices(
         E, K, inliers1, inliers2, debug=debug

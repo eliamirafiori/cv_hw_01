@@ -161,8 +161,8 @@ def find_camera_matrices(E, K, pts1, pts2, debug: bool = False):
 
     if debug:
         print(f"Recovered Pose with {points} valid points.")
-        print("Rotation R:\n", R)
-        print("Translation t:\n", t)
+        print("\nRotation matrix R:\n", R)
+        print("\nTranslation vector t:\n", t)
         print(f"RecoverPose kept {points} points (Cheirality check)")
 
     # Construct P1 (Origin)
@@ -177,8 +177,8 @@ def find_camera_matrices(E, K, pts1, pts2, debug: bool = False):
     P2 = np.dot(K, np.hstack((R, t)))
 
     if debug:
-        print("Projection Matrix 1:\n", P1)
-        print("Projection Matrix 2:\n", P2)
+        print("\nProjection Matrix 1 \"Camera 1\":\n", P1)
+        print("\nProjection Matrix 2 \"Camera 2\":\n", P2)
 
     # Return P1, P2 AND the points that actually define this pose
     return P1, P2, pts1_valid, pts2_valid

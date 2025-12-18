@@ -214,7 +214,7 @@ def find_fundamental_matrix(
     inliers2 = pts2[inlier_mask]
 
     if debug:
-        print("Estimated fundamental matrix F:\n", F)
+        print("\nEstimated fundamental matrix F:\n", F)
         print(f"Inliers after RANSAC: {inliers1.shape[0]} / {pts1.shape[0]}")
 
     # Visualization
