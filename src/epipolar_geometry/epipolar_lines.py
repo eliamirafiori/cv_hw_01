@@ -3,7 +3,7 @@ import cv2 as cv
 from matplotlib import pyplot as plt
 
 
-def draw_epipolar_lines(img1, pts1, img2, pts2, F):  # Added F as argument
+def draw_epipolar_lines(img1, pts1, img2, pts2, F):
     """
     Visualizes epipolar lines.
     For every point in one image, the Fundamental Matrix determines a line in the other image

@@ -184,14 +184,14 @@ if __name__ == "__main__":
         print('\nProjection Matrix 1 "Camera 1":\n', P1)
         print('\nProjection Matrix 2 "Camera 2":\n', P2)
 
-    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+    points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts1_valid)
 
     if debug:
         print(f"Generated {len(points_3d)} 3D points.")
 
     # Calculate quantitative error
     mean_error_1, mean_error_2, total_mean_error = compute_reprojection_error(
-        P1, P2, points_3d, pts1_in, pts2_in
+        P1, P2, points_3d, pts1_valid, pts1_valid
     )
 
     if debug:
