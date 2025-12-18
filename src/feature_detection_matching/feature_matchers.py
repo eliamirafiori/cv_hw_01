@@ -1,7 +1,8 @@
-import numpy as np
-import cv2 as cv
-from matplotlib import pyplot as plt
 import os
+
+import cv2 as cv
+import numpy as np
+from matplotlib import pyplot as plt
 
 """
 ================================================================================
@@ -204,70 +205,103 @@ REFERENCES
 """
 
 
-def feature_detection(
-    img1_path: str,
-    img2_path: str,
-    K=None,
-    dist=None,
+def feature_matcher(
+    img1,
+    kp1,
+    des1,
+    img2,
+    kp2,
+    des2,
+    matcher=None,
+    max_matches: int = 5000,
+    ratio_test: float = 0.75,
     debug: bool = False,
 ):
     """
-    Detects features in two images using ORB and routes them to a matcher.
+    Matches descriptors using the provided matcher.
+    Automatically applies ratio test for FLANN matchers and optionally for BFMatcher.
     """
 
-    # Health check
-    assert os.path.exists(img1_path), f"Left image not found: {img1_path}"
-    assert os.path.exists(img2_path), f"Right image not found: {img2_path}"
+    # Initialize Matcher
+    # cv.NORM_HAMMING: Essential for binary descriptors (ORB, BRIEF).
+    # It calculates distance by counting the number of differing bits (XOR operation).
+    # crossCheck=True: This enforces a mutual match.
+    # Feature A in img1 must match B in img2, AND Feature B in img2 must match A in img1.
+    # This filters out many false positives automatically.
+    if matcher is None:
+        matcher = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
 
-    # Loads in GRAYSCALE because feature detection relies on intensity changes (gradients).
-    # Color information is usually unnecessary for this and adds computational cost (3 channels vs 1).
-    img1 = cv.imread(img1_path, cv.IMREAD_GRAYSCALE)  # Query image (left)
-    img2 = cv.imread(img2_path, cv.IMREAD_GRAYSCALE)  # Train image (right)
+    # Check if matcher is FLANN or BF
+    matcher_type = type(matcher).__name__
 
-    if K is not None and dist is not None:
-        if debug:
-            print("Undistorting images before detection...")
+    good_matches = []
 
-        # (Optional) refine camera matrix to avoid losing pixels at the edges
-        # h, w = img1.shape[:2]
-        # new_camera_matrix, roi = cv.getOptimalNewCameraMatrix(K, dist, (w,h), 1, (w,h))
+    # Perform Matching
+    # A DMatch object has four main attributes:
+    # Match(
+    #    queryIdx,  # index of the descriptor in the first set (des1)
+    #    trainIdx,  # index of the descriptor in the second set (des2)
+    #    imgIdx,    # index of the training image (used with multiple images)
+    #    distance   # distance between the two descriptors
+    # )
+    if matcher_type == "FlannBasedMatcher":
+        # FLANN: use knnMatch + ratio test
+        knn_matches = matcher.knnMatch(des1, des2, k=2)
+        for m, n in knn_matches:
+            if m.distance < ratio_test * n.distance:
+                good_matches.append(m)
+    else:
+        # BFMatcher
+        if getattr(matcher, "crossCheck", False):
+            # Cross-checked BF: use match()
+            matches = matcher.match(des1, des2)
+            good_matches = sorted(matches, key=lambda x: x.distance)
+        else:
+            # Non-cross-checked BF: use knnMatch + ratio test
+            knn_matches = matcher.knnMatch(des1, des2, k=2)
+            for m, n in knn_matches:
+                if m.distance < ratio_test * n.distance:
+                    good_matches.append(m)
+            good_matches = sorted(good_matches, key=lambda x: x.distance)
 
-        # Undistort
-        img1 = cv.undistort(img1, K, dist, None, K)
-        img2 = cv.undistort(img2, K, dist, None, K)
+    # Sorting
+    # DMatch objects have a 'distance' attribute.
+    # Lower distance = more similar descriptors = better match.
+    matches = sorted(matches, key=lambda x: x.distance)
 
-    # Initialize ORB Detector
-    # 'nfeatures=5000' is the maximum number of keypoints to retain.
-    # The default is often 500, but 5000 is better for high-res images or detailed scenes
-    # to ensure enough matches are found later.
-    orb = cv.ORB_create(nfeatures=10000)
-
-    # Detection & Description
-    # detectAndCompute performs two steps:
-    #   1. Detect: Finds 'Keypoints' (points of interest like corners/edges)
-    #   2. Compute: Calculates 'Descriptors' (binary vectors that describe the area around the keypoint)
-    # The 'mask=None' argument means we look for features in the entire image.
-    kp1, des1 = orb.detectAndCompute(img1, None)
-    kp2, des2 = orb.detectAndCompute(img2, None)
-
-    # akaze = cv.AKAZE_create(threshold=0.0005)
-    #
-    # kp1, des1 = akaze.detectAndCompute(img1, None)
-    # kp2, des2 = akaze.detectAndCompute(img2, None)
+    # Selection
+    # We slice the list to keep only the top N matches.
+    # This removes weak matches that might just be noise or repetitive textures.
+    good_matches = good_matches[: min(max_matches, len(good_matches))]
 
     if debug:
-        print(f"Detected {len(kp1)} keypoints in left image.")
-        print(f"Detected {len(kp2)} keypoints in right image.")
-
-    # Safety Check
-    # If an image has no texture (e.g., a blank wall), descriptors might be None.
-    # Proceeding without this check would cause the matchers to crash.
-    if des1 is None or des2 is None:
-        raise RuntimeError(
-            "Descriptors are None. Try different images or a different feature extractor."
+        print(
+            f"Using {len(good_matches)} best matches for fundamental matrix estimation."
         )
 
-    return img1, kp1, des1, img2, kp2, des2
+    # Visualization
+    matches_to_show = min(100, len(good_matches))
+
+    # drawMatches creates a new image containing both img1 and img2 side-by-side
+    # and draws lines connecting the matched keypoints.
+    img_matches = cv.drawMatches(
+        img1,
+        kp1,
+        img2,
+        kp2,
+        good_matches[:matches_to_show],
+        None,
+        flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
+    )
+
+    # Plotting
+    plt.figure(figsize=(15, 7))
+    plt.title("Feature matches (subset)")
+    plt.imshow(img_matches)
+    plt.axis("off")
+    plt.show()
+
+    return good_matches
 
 
 def brute_force_based_matcher(

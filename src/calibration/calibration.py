@@ -357,14 +357,4 @@ def calibration(
         trans_vecs=trans_vecs,
     )
 
-    img = cv.imread(os.path.join(calibration_assets_path, "calibration_image.png"))
-
-    # Draw detected corners
-    cv.drawChessboardCorners(img, inner_corners, imgpoints[i], True)
-
-    # Draw reprojected points
-    proj, _ = cv.projectPoints(objpoints[i], rot_vecs[i], trans_vecs[i], K, dist_coeffs)
-    for p in proj:
-        cv.circle(img, tuple(p.ravel().astype(int)), 3, (0, 0, 255), -1)
-
     return K, dist_coeffs

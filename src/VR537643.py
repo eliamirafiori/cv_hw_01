@@ -1,7 +1,7 @@
 import os
 
-import numpy as np
 import cv2 as cv
+import numpy as np
 
 from src.calibration.calibration import calibration, load_calibration
 from src.epipolar_geometry.epipolar_lines import draw_epipolar_lines
@@ -15,9 +15,9 @@ from src.epipolar_geometry.fundamental_matrix import (
     estimate_fundamental_matrix,
     find_fundamental_matrix,
 )
-from src.feature_detection_matching.feature_detection import (
+from src.feature_detection_matching.feature_detectors import feature_detection
+from src.feature_detection_matching.feature_matchers import (
     brute_force_based_matcher,
-    feature_detection,
     flann_based_matcher,
 )
 from src.triangulation.projection_matrices import (
@@ -67,7 +67,37 @@ if __name__ == "__main__":
     # Check if we need to run calibration, or just load it
     camera_path = "phone/vertical"
     calib_path = f"assets/calibration/{camera_path}/calibration.npz"
-    debug = True
+    debug = False
+    detectors_matchers = [
+        # ORB with lots of features, BFMatcher using Hamming (binary)
+        (
+            cv.ORB_create(nfeatures=10000),
+            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True),
+        ),
+        # ORB with FLANN LSH
+        (
+            cv.ORB_create(nfeatures=10000),
+            cv.FlannBasedMatcher(
+                dict(algorithm=6, table_number=6, key_size=12, multi_probe_level=1), {}
+            ),  # LSH for binary descriptors
+        ),
+        # AKAZE with custom threshold, BFMatcher using Hamming
+        (
+            cv.AKAZE_create(threshold=0.0005),
+            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True),
+        ),
+        # SIFT with BFMatcher using L2 (float descriptors)
+        (cv.SIFT_create(), cv.BFMatcher(cv.NORM_L2, crossCheck=True)),
+        # SIFT with FLANN KD-Tree
+        (
+            cv.SIFT_create(),
+            cv.FlannBasedMatcher(
+                dict(algorithm=1, trees=5), dict(checks=50)
+            ),  # KD-Tree for float descriptors
+        ),
+        # BRISK with BFMatcher using Hamming (binary)
+        (cv.BRISK_create(), cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)),
+    ]
 
     K, dist = None, None
 
@@ -86,111 +116,116 @@ if __name__ == "__main__":
         print(f"Camera Matrix K: {K}")
         print(f"Distortion Coefficients: {dist}")
 
-    ### Feature Extraction and Matching ###
+    for detector, matcher in detectors_matchers:
+        ### Feature Extraction and Matching ###
 
-    if debug:
-        print("\n\n### Feature Extraction and Matching ###\n")
+        if debug:
+            print("\n\n### Feature Extraction and Matching ###\n")
 
-    # Run feature detection WITH undistortion
-    img1, kp1, des1, img2, kp2, des2 = feature_detection(
-        img1_path=f"assets/{camera_path}/1.jpg",
-        img2_path=f"assets/{camera_path}/2.jpg",
-        K=K,
-        dist=dist,
-        debug=debug,
-    )
+        # Run feature detection WITH undistortion
+        img1, kp1, des1, img2, kp2, des2 = feature_detection(
+            img1_path=f"assets/{camera_path}/1.jpg",
+            img2_path=f"assets/{camera_path}/2.jpg",
+            K=K,
+            dist=dist,
+            debug=debug,
+        )
 
-    matches = []
-    use_FLANN_matcher = True
+        matches = []
+        use_FLANN_matcher = True
 
-    # Matching Routing
-    # Depending on the flag, we route the features to different matching strategies.
-    if use_FLANN_matcher:
-        # FLANN (Fast Library for Approximate Nearest Neighbors) is faster for large datasets.
-        # Note: Since ORB uses binary descriptors, FLANN requires specific tuning (LSH index).
-        matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
-    else:
-        # Brute-Force checks every keypoint in img1 against every keypoint in img2.
-        # It is slower but provides the mathematically 'perfect' nearest neighbor.
-        matches = brute_force_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
+        # Matching Routing
+        # Depending on the flag, we route the features to different matching strategies.
+        if use_FLANN_matcher:
+            # FLANN (Fast Library for Approximate Nearest Neighbors) is faster for large datasets.
+            # Note: Since ORB uses binary descriptors, FLANN requires specific tuning (LSH index).
+            matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
+        else:
+            # Brute-Force checks every keypoint in img1 against every keypoint in img2.
+            # It is slower but provides the mathematically 'perfect' nearest neighbor.
+            matches = brute_force_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
 
-    ### Epipolar Geometry Estimation ###
+        ### Epipolar Geometry Estimation ###
 
-    if debug:
-        print("\n\n### Epipolar Geometry Estimation ###\n")
+        if debug:
+            print("\n\n### Epipolar Geometry Estimation ###\n")
 
-    # Extract matched points
-    pts1, pts2 = get_keypoint_coords_from_matches(kp1, kp2, matches)
+        # Extract matched points
+        pts1, pts2 = get_keypoint_coords_from_matches(kp1, kp2, matches)
 
-    if debug:
-        print(f"Initial Matches: {len(pts1)}")
+        if debug:
+            print(f"Initial Matches: {len(pts1)}")
 
-    F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
-        pts1, pts2, ransac_thresh=1.0, confidence=0.999
-    )
+        F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
+            pts1, pts2, ransac_thresh=1.0, confidence=0.999
+        )
 
-    if debug:
-        print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
-        print(f"Fundamental Matrix:\n{F}\n")
+        if debug:
+            print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
+            print(f"Fundamental Matrix:\n{F}\n")
 
-    # Essential matrix from Fundamental matrix
-    # At this point E is NOT guaranteed to be a valid Essential matrix.
-    E = K.T @ F @ K
+        # Essential matrix from Fundamental matrix
+        # At this point E is NOT guaranteed to be a valid Essential matrix.
+        E = K.T @ F @ K
 
-    E = enforce_essential_constraints(E)
-    print(f"Derived Essential Matrix:\n{E}\n")
+        E = enforce_essential_constraints(E)
+        print(f"Derived Essential Matrix:\n{E}\n")
 
-    # Essential matrix directly
-    E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
+        # Essential matrix directly
+        E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
 
-    if debug:
-        print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
-        print(f"Essential Matrix:\n{E}\n")
+        if debug:
+            print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
+            print(f"Essential Matrix:\n{E}\n")
 
-    # Recover pose
-    # This extracts the rotation and translation.
-    # It uses the points (pts1, pts2) to check which of the 4 solutions is valid.
-    # pts1 and pts2 should be the INLIERS from your previous steps.
-    num_points, R, t, mask = cv.recoverPose(E, pts1_in, pts2_in, K)
+        # Recover pose
+        # This extracts the rotation and translation.
+        # It uses the points (pts1, pts2) to check which of the 4 solutions is valid.
+        # pts1 and pts2 should be the INLIERS from your previous steps.
+        num_points, R, t, mask = cv.recoverPose(E, pts1_in, pts2_in, K)
 
-    # Filter points again using the pose mask
-    mask_pose = mask.ravel().astype(bool)
-    pts1_valid = pts1_in[mask_pose]
-    pts2_valid = pts1_in[mask_pose]
+        # Filter points again using the pose mask
+        mask_pose = mask.ravel().astype(bool)
+        pts1_valid = pts1_in[mask_pose]
+        pts2_valid = pts1_in[mask_pose]
 
-    if debug:
-        print(f"Recovered Pose with {num_points} valid points.")
-        print(f"Rotation matrix R:\n{R}\n")
-        print(f"Translation vector t:\n{t}\n")
-        print(f"RecoverPose kept {num_points} points (Cheirality check)")
+        if debug:
+            print(f"Recovered Pose with {num_points} valid points.")
+            print(f"Rotation matrix R:\n{R}\n")
+            print(f"Translation vector t:\n{t}\n")
+            print(f"RecoverPose kept {num_points} points (Cheirality check)")
 
-    draw_epipolar_lines(img1, pts1, img2, pts2, F)
+        draw_epipolar_lines(img1, pts1, img2, pts2, F)
 
-    ### Triangulation and 3D Reconstruction ###
+        ### Triangulation and 3D Reconstruction ###
 
-    if debug:
-        print("\n\n### Triangulation and 3D Reconstruction ###\n")
+        if debug:
+            print("\n\n### Triangulation and 3D Reconstruction ###\n")
 
-    P1, P2 = estimate_projection_matrices(K, R, t)
+        P1, P2 = estimate_projection_matrices(K, R, t)
 
-    if debug:
-        print(f'Projection Matrix 1 "Camera 1":\n{P1}\n')
-        print(f'Projection Matrix 2 "Camera 2":\n{P2}\n')
+        if debug:
+            print(f"Projection Matrix 1:\n{P1}\n")
+            print(f"Projection Matrix 2:\n{P2}\n")
 
-    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
-    # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+        points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+        # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
 
-    if debug:
-        print(f"Generated {len(points_3d)} 3D points.")
+        if debug:
+            print(f"Generated {len(points_3d)} 3D points.")
 
-    # Calculate quantitative error
-    mean_error_1, mean_error_2, total_mean_error = compute_reprojection_error(
-        P1, P2, points_3d, pts1_valid, pts1_valid
-    )
+        # Calculate quantitative error
+        mean_error_1, mean_error_2, total_mean_error = compute_reprojection_error(
+            P1, P2, points_3d, pts1_valid, pts1_valid
+        )
 
-    if debug:
-        print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
-        print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
-        print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
+        if True:
+            detector_type = type(detector).__name__
+            matcher_type = type(matcher).__name__
+            print(f"Detector: {detector_type}")
+            print(f"Matcher: {matcher_type}")
+            print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
+            print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
+            print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
 
-    plot_3d_point_cloud(points_3d)
+        plot_3d_point_cloud(points_3d)
