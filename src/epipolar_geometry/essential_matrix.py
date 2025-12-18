@@ -146,7 +146,6 @@ def estimate_essential_matrix(
     K,
     prob=0.999,
     threshold=1.0,
-    debug=False,
 ):
     """
     Estimates the Essential Matrix E using RANSAC and the Camera Matrix K.

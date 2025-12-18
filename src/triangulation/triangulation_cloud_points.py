@@ -174,7 +174,7 @@ def triangulate_3d_points(P1, P2, pts1, pts2):
     mean_3d = np.mean(points_3d, axis=0)
     points3d_centered = points_3d - mean_3d
 
-    return points3d_centered
+    return points_3d
 
 
 def plot_3d_point_cloud(points_3d):

@@ -125,9 +125,9 @@ if __name__ == "__main__":
     if debug:
         print(f"Initial Matches: {len(pts1)}")
 
-    F, inliers1, inliers2 = find_fundamental_matrix(
-        img1, kp1, pts1, img2, kp2, pts2, matches, debug=debug
-    )
+    # F, inliers1, inliers2 = find_fundamental_matrix(
+    #     img1, kp1, pts1, img2, kp2, pts2, matches, debug=debug
+    # )
 
     F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
         pts1, pts2, ransac_thresh=1.0, confidence=0.999
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     if debug:
         print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
 
-    E, inliers1, inliers2 = find_essential_matrix(pts1, pts2, K, debug=debug)
+    # E, inliers1, inliers2 = find_essential_matrix(pts1, pts2, K, debug=debug)
 
     # Essential matrix from Fundamental matrix
     # At this point E is NOT guaranteed to be a valid Essential matrix.
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     E = enforce_essential_constraints(E)
 
     # Essential matrix directly
-    E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K, debug=True)
+    E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
 
     if debug:
         print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
@@ -158,8 +158,8 @@ if __name__ == "__main__":
 
     # Filter points again using the pose mask
     mask_pose = mask.ravel().astype(bool)
-    pts1_valid = pts1[mask_pose]
-    pts2_valid = pts2[mask_pose]
+    pts1_valid = pts1_in[mask_pose]
+    pts2_valid = pts1_in[mask_pose]
 
     if debug:
         print(f"Recovered Pose with {num_points} valid points.")
@@ -174,9 +174,9 @@ if __name__ == "__main__":
     if debug:
         print("\n\n### Triangulation and 3D Reconstruction ###\n")
 
-    P1, P2, valid_pts1, valid_pts2 = find_camera_matrices(
-        E, K, inliers1, inliers2, debug=debug
-    )
+    # P1, P2, valid_pts1, valid_pts2 = find_camera_matrices(
+    #     E, K, inliers1, inliers2, debug=debug
+    # )
 
     P1, P2 = estimate_projection_matrices(K, R, t)
 
@@ -184,7 +184,8 @@ if __name__ == "__main__":
         print('\nProjection Matrix 1 "Camera 1":\n', P1)
         print('\nProjection Matrix 2 "Camera 2":\n', P2)
 
-    points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts1_valid)
+    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+    points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
 
     if debug:
         print(f"Generated {len(points_3d)} 3D points.")
