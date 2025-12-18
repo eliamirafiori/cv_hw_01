@@ -1,8 +1,10 @@
 import os
+import time
 
 import cv2 as cv
 import numpy as np
 from matplotlib import pyplot as plt
+from tabulate import tabulate
 
 from src.calibration.calibration import calibration, load_calibration
 from src.epipolar_geometry.epipolar_lines import draw_epipolar_lines
@@ -146,6 +148,8 @@ if __name__ == "__main__":
         ),
     ]
 
+    results = []
+
     K, dist = None, None
 
     if os.path.exists(calib_path):
@@ -164,6 +168,8 @@ if __name__ == "__main__":
         print(f"Distortion Coefficients:\n{dist}\n")
 
     for detector, matcher in detectors_matchers:
+        start_time = time.perf_counter()
+
         if debug:
             detector_type = type(detector).__name__
             matcher_type = type(matcher).__name__
@@ -185,22 +191,22 @@ if __name__ == "__main__":
             debug=debug,
         )
 
-        matches = []
-        use_FLANN_matcher = True
+        n_keypoints = len(kp1)
 
-        # Matching Routing
-        # Depending on the flag, we route the features to different matching strategies.
-        # if use_FLANN_matcher:
-        #     # FLANN (Fast Library for Approximate Nearest Neighbors) is faster for large datasets.
-        #     # Note: Since ORB uses binary descriptors, FLANN requires specific tuning (LSH index).
-        #     matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
-        # else:
-        #     # Brute-Force checks every keypoint in img1 against every keypoint in img2.
-        #     # It is slower but provides the mathematically 'perfect' nearest neighbor.
-        #     matches = brute_force_based_matcher(img1, kp1, des1, img2, kp2, des2, debug)
         matches = feature_matcher(
             img1, kp1, des1, img2, kp2, des2, matcher=matcher, debug=debug
         )
+
+        n_matches = len(matches)
+
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+
+        if debug:
+            print(f"Time elapsed: {elapsed_time:.4f} s\n")
+            print(
+                f"Number of keypoints: {len(kp1)}, Number of matches: {len(matches)}\n"
+            )
 
         if debug:
             visualize_matcher(img1, kp1, img2, kp2, matches)
@@ -234,6 +240,8 @@ if __name__ == "__main__":
         # Essential matrix directly
         E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
 
+        n_inliers = len(pts1_in)
+
         if debug:
             print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
             print(f"Essential Matrix:\n{E}\n")
@@ -255,7 +263,8 @@ if __name__ == "__main__":
             print(f"Translation vector t:\n{t}\n")
             print(f"RecoverPose kept {num_points} points (Cheirality check)")
 
-        draw_epipolar_lines(img1, pts1, img2, pts2, F)
+        if debug:
+            draw_epipolar_lines(img1, pts1, img2, pts2, F)
 
         ### Triangulation and 3D Reconstruction ###
 
@@ -274,6 +283,8 @@ if __name__ == "__main__":
         points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
         print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
 
+        n_3d_points = points_3d.shape[0]
+
         if debug:
             print(f"Generated {len(points_3d)} 3D points.")
 
@@ -282,9 +293,41 @@ if __name__ == "__main__":
             P1, P2, points_3d, pts1_valid, pts1_valid
         )
 
+        # Append results
+        results.append(
+            [
+                detector.__class__.__name__,
+                matcher.__class__.__name__,
+                n_keypoints,
+                n_matches,
+                n_inliers,
+                n_3d_points,
+                f"{total_mean_error:.2f} px",
+                f"{elapsed_time:.2f} s",
+            ]
+        )
+
         if debug:
             print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
             print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
             print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
 
-        plot_3d_point_cloud(points_3d)
+        if debug:
+            plot_3d_point_cloud(points_3d)
+
+    print(
+        tabulate(
+            results,
+            headers=[
+                "Detector",
+                "Matcher",
+                "#Keypoints",
+                "#Matches",
+                "#Inliers",
+                "#3D Points",
+                "Reproj Error",
+                "Time",
+            ],
+            tablefmt="github",
+        )
+    )
