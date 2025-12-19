@@ -278,21 +278,18 @@ if __name__ == "__main__":
         print(f"Projection Matrix 1:\n{P1}\n")
         print(f"Projection Matrix 2:\n{P2}\n")
 
-    # pts1_norm = cv.undistortPoints(pts1_in.reshape(-1, 1, 2), K, dist).reshape(-1, 2)
-    # pts2_norm = cv.undistortPoints(pts2_in.reshape(-1, 1, 2), K, dist).reshape(-1, 2)
+    # points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+    # print("All points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
 
-    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
-    print("All points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
-
-    # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+    points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
     # print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
 
     # Positive depth filter
-    # mask_z = points_3d[:, 2] > 0
-    #
-    # points_3d = points_3d[mask_z]
-    # pts1_used = pts1_in[mask_z]
-    # pts2_used = pts2_in[mask_z]
+    mask_z = points_3d[:, 2] > 0
+
+    points_3d = points_3d[mask_z]
+    pts1_used = pts1_valid[mask_z]
+    pts2_used = pts2_valid[mask_z]
 
     # Filtering out extreme depth outliers using percentile
     z = points_3d[:, 2]
@@ -301,8 +298,8 @@ if __name__ == "__main__":
     mask_depth = z < upper
 
     points_3d = points_3d[mask_depth]
-    pts1_used = pts1_in[mask_depth]
-    pts2_used = pts2_in[mask_depth]
+    pts1_used = pts1_used[mask_depth]
+    pts2_used = pts2_used[mask_depth]
 
     n_3d_points = points_3d.shape[0]
 
