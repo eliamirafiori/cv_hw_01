@@ -167,6 +167,193 @@ if __name__ == "__main__":
         print(f"Camera Matrix K:\n{K}\n")
         print(f"Distortion Coefficients:\n{dist}\n")
 
+    start_time = time.perf_counter()
+
+    detector = cv.ORB_create(nfeatures=10000)
+    matcher = cv.FlannBasedMatcher(
+        dict(algorithm=6, table_number=6, key_size=12, multi_probe_level=1), {}
+    )
+
+    if debug:
+        detector_type = type(detector).__name__
+        matcher_type = type(matcher).__name__
+        print(f"\n\nDetector: {detector_type}")
+        print(f"Matcher: {matcher_type}")
+
+    ### Feature Extraction and Matching ###
+
+    if debug:
+        print("\n\n### Feature Extraction and Matching ###\n")
+
+    # Run feature detection WITH undistortion
+    img1, kp1, des1, img2, kp2, des2 = feature_detection(
+        img1_path=f"assets/{camera_path}/1.jpg",
+        img2_path=f"assets/{camera_path}/2.jpg",
+        K=K,
+        dist=dist,
+        detector=detector,
+        debug=debug,
+    )
+
+    n_keypoints = len(kp1)
+
+    matches = flann_based_matcher(img1, kp1, des1, img2, kp2, des2, debug=debug)
+
+    n_matches = len(matches)
+
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+
+    if debug:
+        print(f"Time elapsed: {elapsed_time:.4f} s\n")
+        print(f"Number of keypoints: {len(kp1)}, Number of matches: {len(matches)}\n")
+
+    if debug:
+        visualize_matcher(img1, kp1, img2, kp2, matches)
+
+    ### Epipolar Geometry Estimation ###
+
+    if debug:
+        print("\n\n### Epipolar Geometry Estimation ###\n")
+
+    # Extract matched points
+    pts1, pts2 = get_keypoint_coords_from_matches(kp1, kp2, matches)
+
+    if debug:
+        print(f"Initial Matches: {len(pts1)}")
+
+    F, pts1_in, pts2_in, mask = estimate_fundamental_matrix(
+        pts1, pts2, ransac_thresh=1.0, confidence=0.999
+    )
+
+    if debug:
+        print(f"F inliers: {len(pts1_in)} / {len(pts1)}")
+        print(f"Fundamental Matrix:\n{F}\n")
+
+    # Essential matrix from Fundamental matrix
+    # At this point E is NOT guaranteed to be a valid Essential matrix.
+    E = K.T @ F @ K
+
+    E = enforce_essential_constraints(E)
+    print(f"Derived Essential Matrix:\n{E}\n")
+
+    # Essential matrix directly
+    # We're using the inliers found with F, new inliers will be more polished
+    E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1_in, pts2_in, K)
+
+    n_inliers = len(pts1_in)
+
+    if debug:
+        print(f"E inliers: {len(pts1_in)} / {len(pts1)}")
+        print(f"Essential Matrix:\n{E}\n")
+
+    # Recover pose
+    # This extracts the rotation and translation.
+    # It uses the points (pts1, pts2) to check which of the 4 solutions is valid.
+    # pts1 and pts2 should be the INLIERS from your previous steps.
+    num_points, R, t, mask = cv.recoverPose(E, pts1_in, pts2_in, K)
+
+    # Filter points again using the pose mask
+    mask_pose = mask.ravel().astype(bool)
+    pts1_valid = pts1_in[mask_pose]
+    pts2_valid = pts2_in[mask_pose]
+
+    if debug:
+        print(f"Recovered Pose with {num_points} valid points.")
+        print(f"Rotation matrix R:\n{R}\n")
+        print(f"Translation vector t:\n{t}\n")
+        print(f"RecoverPose kept {num_points} points (Cheirality check)")
+
+    if debug:
+        draw_epipolar_lines(img1, pts1, img2, pts2, F)
+
+    ### Triangulation and 3D Reconstruction ###
+
+    if debug:
+        print("\n\n### Triangulation and 3D Reconstruction ###\n")
+
+    P1, P2 = estimate_projection_matrices(K, R, t)
+
+    if debug:
+        print(f"Projection Matrix 1:\n{P1}\n")
+        print(f"Projection Matrix 2:\n{P2}\n")
+
+    # pts1_norm = cv.undistortPoints(pts1_in.reshape(-1, 1, 2), K, dist).reshape(-1, 2)
+    # pts2_norm = cv.undistortPoints(pts2_in.reshape(-1, 1, 2), K, dist).reshape(-1, 2)
+
+    points_3d = triangulate_3d_points(P1, P2, pts1_in, pts2_in)
+    print("All points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
+
+    # points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
+    # print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
+
+    # Positive depth filter
+    # mask_z = points_3d[:, 2] > 0
+    #
+    # points_3d = points_3d[mask_z]
+    # pts1_used = pts1_in[mask_z]
+    # pts2_used = pts2_in[mask_z]
+
+    # Filtering out extreme depth outliers using percentile
+    z = points_3d[:, 2]
+    upper = np.percentile(z, 97)
+
+    mask_depth = z < upper
+
+    points_3d = points_3d[mask_depth]
+    pts1_used = pts1_in[mask_depth]
+    pts2_used = pts2_in[mask_depth]
+
+    n_3d_points = points_3d.shape[0]
+
+    if debug:
+        print(f"Generated {len(points_3d)} 3D points.")
+
+    # Calculate quantitative error
+    mean_error_1, mean_error_2, total_mean_error = compute_reprojection_error(
+        P1, P2, points_3d, pts1_used, pts2_used
+    )
+
+    if debug:
+        print(f"Re-projection Error Camera 1: {mean_error_1:.4f} px")
+        print(f"Re-projection Error Camera 2: {mean_error_2:.4f} px")
+        print(f"Total Mean Re-projection Error: {total_mean_error:.4f} px")
+
+    if debug:
+        plot_3d_point_cloud(points_3d)
+
+    # Append results
+    results.append(
+        [
+            detector.__class__.__name__,
+            matcher.__class__.__name__,
+            n_keypoints,
+            n_matches,
+            n_inliers,
+            n_3d_points,
+            f"{total_mean_error:.2f} px",
+            f"{elapsed_time:.2f} s",
+        ]
+    )
+
+    print(
+        tabulate(
+            results,
+            headers=[
+                "Detector",
+                "Matcher",
+                "#Keypoints",
+                "#Matches",
+                "#Inliers",
+                "#3D Points",
+                "Reproj Error",
+                "Time",
+            ],
+            tablefmt="github",
+        )
+    )
+
+    """
     for detector, matcher in detectors_matchers:
         start_time = time.perf_counter()
 
@@ -350,3 +537,4 @@ if __name__ == "__main__":
             tablefmt="github",
         )
     )
+    """
