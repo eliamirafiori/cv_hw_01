@@ -40,44 +40,24 @@ def visualize_matcher(img1, kp1, img2, kp2, matches):
     # Visualization
     matches_to_show = min(100, len(matches))
 
-    if matcher_type == "FlannBasedMatcher":
-        # drawMatches creates a new image containing both img1 and img2 side-by-side
-        # and draws lines connecting the matched keypoints.
-        img_matches = cv.drawMatches(
-            img1,
-            kp1,
-            img2,
-            kp2,
-            matches[:matches_to_show],
-            None,
-            flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
-        )
+    # drawMatches creates a new image containing both img1 and img2 side-by-side
+    # and draws lines connecting the matched keypoints.
+    img_matches = cv.drawMatches(
+        img1,
+        kp1,
+        img2,
+        kp2,
+        matches[:matches_to_show],
+        None,
+        flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
+    )
 
-        # Plotting
-        plt.figure(figsize=(15, 7))
-        plt.title("Feature matches (subset)")
-        plt.imshow(img_matches)
-        plt.axis("off")
-        plt.show()
-    else:
-        # drawMatches creates a new image containing both img1 and img2 side-by-side
-        # and draws lines connecting the matched keypoints.
-        img_matches = cv.drawMatches(
-            img1,
-            kp1,
-            img2,
-            kp2,
-            matches[:matches_to_show],
-            None,
-            flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,  # Only draw matched points, not all detected ones
-        )
-
-        # Plotting
-        plt.figure(figsize=(15, 7))
-        plt.title("ORB feature matches (subset)")
-        plt.imshow(img_matches)
-        plt.axis("off")
-        plt.show()
+    # Plotting
+    plt.figure(figsize=(15, 10))
+    plt.title("Feature matches (subset)")
+    plt.imshow(img_matches)
+    plt.axis("off")
+    plt.show()
 
 
 def compute_reprojection_error(P1, P2, points_3d, pts1, pts2):
@@ -121,7 +101,7 @@ if __name__ == "__main__":
         # ORB with lots of features, BFMatcher using Hamming (binary)
         (
             cv.ORB_create(nfeatures=10000),
-            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=False),
+            cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True),
         ),
         # ORB with FLANN LSH
         (
@@ -279,7 +259,7 @@ if __name__ == "__main__":
         print(f"Projection Matrix 2:\n{P2}\n")
 
     points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
-    
+
     if debug:
         print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
 
@@ -349,7 +329,6 @@ if __name__ == "__main__":
         )
     )
 
-    """
     for detector, matcher in detectors_matchers:
         start_time = time.perf_counter()
 
@@ -421,7 +400,8 @@ if __name__ == "__main__":
         print(f"Derived Essential Matrix:\n{E}\n")
 
         # Essential matrix directly
-        E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1, pts2, K)
+        # We're using the inliers found with F, new inliers will be more polished
+        E, pts1_in, pts2_in, mask = estimate_essential_matrix(pts1_in, pts2_in, K)
 
         n_inliers = len(pts1_in)
 
@@ -438,7 +418,7 @@ if __name__ == "__main__":
         # Filter points again using the pose mask
         mask_pose = mask.ravel().astype(bool)
         pts1_valid = pts1_in[mask_pose]
-        pts2_valid = pts1_in[mask_pose]
+        pts2_valid = pts2_in[mask_pose]
 
         if debug:
             print(f"Recovered Pose with {num_points} valid points.")
@@ -461,9 +441,13 @@ if __name__ == "__main__":
             print(f"Projection Matrix 2:\n{P2}\n")
 
         points_3d = triangulate_3d_points(P1, P2, pts1_valid, pts2_valid)
-        
+
         if debug:
-            print("Valid points Z range:", np.min(points_3d[:, 2]), np.max(points_3d[:, 2]))
+            print(
+                "Valid points Z range:",
+                np.min(points_3d[:, 2]),
+                np.max(points_3d[:, 2]),
+            )
 
         # Positive depth filter
         mask_z = points_3d[:, 2] > 0
@@ -514,8 +498,6 @@ if __name__ == "__main__":
             ]
         )
 
-        break
-
     print(
         tabulate(
             results,
@@ -532,4 +514,3 @@ if __name__ == "__main__":
             tablefmt="github",
         )
     )
-    """

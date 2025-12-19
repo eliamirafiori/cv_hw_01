@@ -174,7 +174,7 @@ def triangulate_3d_points(P1, P2, pts1, pts2):
 
 def plot_3d_point_cloud(points_3d):
     """
-    Visualizes the 3D point cloud using Matplotlib.
+    Visualizes the 3D point cloud using Matplotlib with depth-based coloring.
     """
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection="3d")
@@ -184,16 +184,21 @@ def plot_3d_point_cloud(points_3d):
     Y = points_3d[:, 1]
     Z = points_3d[:, 2]
 
-    ax.scatter(X, Y, Z, c="b", marker=".", s=2)
+    # c=Z          -> Maps the color to the Z value (depth)
+    # cmap='viridis' -> Sets the gradient scheme (try 'plasma', 'inferno', 'jet')
+    # depthshade=True -> Optional: adds shading to enhance 3D perception
+    scatter = ax.scatter(X, Y, Z, c=Z, cmap="viridis", marker=".", s=2, depthshade=True)
+
+    # Add a color bar to interpret the depth
+    cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.6)
+    cbar.set_label("Depth (Z)")
 
     ax.set_xlabel("X Axis")
     ax.set_ylabel("Y Axis")
     ax.set_zlabel("Z Axis")
-    ax.set_title("3D Reconstruction")
+    ax.set_title("3D Reconstruction (Colored by Depth)")
 
-    # Important: Matplotlib 3D scaling is often weird.
-    # This helps keep the aspect ratio somewhat correct.
-    # (Though for perfect equal aspect, you usually need a custom function)
+    # (Keep your existing scaling logic)
     max_range = (
         np.array([X.max() - X.min(), Y.max() - Y.min(), Z.max() - Z.min()]).max() / 2.0
     )
@@ -204,7 +209,7 @@ def plot_3d_point_cloud(points_3d):
     ax.set_ylim(mid_y - max_range, mid_y + max_range)
     ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
-    # Look from the bottom (elevation -90 degrees)
+    # Look from the bottom
     ax.view_init(elev=-90, azim=-90)
 
     plt.show()
