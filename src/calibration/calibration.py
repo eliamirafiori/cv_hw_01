@@ -1,7 +1,5 @@
 import numpy as np
 import cv2 as cv
-from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D visualization
-from matplotlib import pyplot as plt
 import glob
 import os
 
