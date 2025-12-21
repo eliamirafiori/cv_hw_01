@@ -214,7 +214,7 @@ def feature_matcher(
     des2,
     matcher=None,
     max_matches: int = 5000,
-    ratio_test: float = 0.75,
+    ratio_test: float = 0.70,
     debug: bool = False,
 ):
     """
@@ -253,7 +253,7 @@ def feature_matcher(
 
         # Ratio test as per Lowe's paper
         for i, (m, n) in enumerate(matches):
-            if m.distance < 0.7 * n.distance:
+            if m.distance < ratio_test * n.distance:
                 good_matches.append(m)
     else:
         # BFMatcher

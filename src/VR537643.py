@@ -110,8 +110,8 @@ if __name__ == "__main__":
 
         # Run feature detection WITH undistortion
         img1, kp1, des1, img2, kp2, des2 = feature_detection(
-            img1_path=f"assets/{camera_path}/1.jpg",
-            img2_path=f"assets/{camera_path}/2.jpg",
+            img1_path=f"assets/{camera_path}/moai_view1.jpg",
+            img2_path=f"assets/{camera_path}/moai_view2.jpg",
             K=K,
             dist=dist,
             detector=detector,
@@ -162,7 +162,8 @@ if __name__ == "__main__":
         E = K.T @ F @ K
 
         E = enforce_essential_constraints(E)
-        print(f"Derived Essential Matrix:\n{E}\n")
+        if debug:
+            print(f"Derived Essential Matrix:\n{E}\n")
 
         # Essential matrix directly
         # We're using the inliers found with F, new inliers will be more polished
@@ -192,7 +193,7 @@ if __name__ == "__main__":
             print(f"RecoverPose kept {num_points} points (Cheirality check)")
 
         if debug:
-            draw_epipolar_lines(img1, pts1, img2, pts2, F)
+            draw_epipolar_lines(img1, pts1_valid, img2, pts2_valid, F)
 
         ### Triangulation and 3D Reconstruction ###
 

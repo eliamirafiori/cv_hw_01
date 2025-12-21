@@ -329,7 +329,6 @@ def calibration(
     std_error = np.std(errors)
 
     if debug:
-
         print(f"\nCamera Matrix K:\n{K}")
         print(f"Re-projection Error (in pixels):\n\t{rms_error}")
         # The error is good when it's under 0.08
