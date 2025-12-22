@@ -6,9 +6,10 @@ Elia Mirafiori VR537643
 
 To run this project you can either run it via the Jupyter Notebook or using directly the source code.
 
-### Source Code
 
 In order to run this project on your PC, you have to install the required 3rd party libraries that you can find in the `requirements.txt` file.
+
+### Virtual Envirovment
 
 I highly suggest to create a Virtual Envirovment, to do so go to the root folder of this project and run:
 
@@ -27,6 +28,12 @@ Now you can install the packages using:
 ```bash
 pip install -r requirements.txt
 ```
+
+### Jupyter Notebook
+
+If you plan to use the Jupyter notebook you need to select the proper Kernel in the Top-Right corner. Choose the one you just create with the packages installed.
+
+### Source Code
 
 Finally, you can run the project by using:
 
