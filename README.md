@@ -6,7 +6,6 @@ Elia Mirafiori VR537643
 
 To run this project you can either run it via the Jupyter Notebook or using directly the source code.
 
-
 In order to run this project on your PC, you have to install the required 3rd party libraries that you can find in the `requirements.txt` file.
 
 ### Virtual Envirovment
